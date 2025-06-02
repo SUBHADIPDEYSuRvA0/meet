@@ -333,6 +333,37 @@ io.on("connection", (socket) => {
     }
   })
 
+  // --- SFU signaling handlers (instead of mesh SDP/ICE) ---
+
+  // Example: SFU signaling events (replace with your SFU integration as needed)
+  io.on("connection", (socket) => {
+    // SFU: client requests to join SFU room
+    socket.on("sfu-join", ({ roomCode, userEmail }) => {
+      // You would integrate with your SFU here (e.g., mediasoup, Janus, etc.)
+      // For demonstration, just log and acknowledge
+      console.log(`🔗 [SFU] ${userEmail} requests to join SFU room ${roomCode}`);
+      // Example: emit 'sfu-send-offer' or similar as per your SFU API
+      // socket.emit("sfu-send-offer", { sdp: ... });
+    });
+
+    // SFU: handle send/receive offer/answer for publishing/subscribing streams
+    socket.on("sfu-send-answer", (data) => {
+      // Forward to SFU backend or handle as needed
+      // Example: sfuBackend.handleSendAnswer(data)
+    });
+
+    socket.on("sfu-recv-answer", (data) => {
+      // Forward to SFU backend or handle as needed
+      // Example: sfuBackend.handleRecvAnswer(data)
+    });
+
+    // SFU: handle stream removal
+    socket.on("sfu-stream-remove", ({ streamId }) => {
+      // Notify clients as needed
+      socket.broadcast.emit("sfu-stream-removed", { streamId });
+    });
+  });
+
   // Handle disconnection
   socket.on("disconnect", (reason) => {
     console.log("🔌 User disconnected:", socket.id, "Reason:", reason)

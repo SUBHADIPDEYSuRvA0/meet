@@ -42,7 +42,7 @@ export class RoomController {
         })
       }
 
-      // Return room information for joining
+      // Return room information for joining (add SFU info for client)
       res.json({
         success: true,
         data: {
@@ -52,6 +52,14 @@ export class RoomController {
           createdAt: room.createdAt,
           userEmail: email,
           canJoin: true,
+          // Add SFU signaling info for client
+          sfu: {
+            enabled: true,
+            transport: "udp",
+            // Optionally add SFU server URL or ICE config if needed
+            // sfuUrl: process.env.SFU_URL || "wss://your-sfu-server:port",
+            // iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+          },
         },
         message: "Room found. Ready to join.",
       })
