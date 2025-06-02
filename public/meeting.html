@@ -2172,97 +2172,68 @@
             return peerConnection;
         }
 
-        // Enhanced offer handling with m-line ordering
-        socket.on('offer', async ({ offer, from, fromUser }) => {
-            console.log('📤 Received offer from:', fromUser || from);
+      socket.on('offer', async ({ offer, from, fromUser }) => {
+  console.log('📤 Received offer from:', fromUser || from);
 
-            try {
-                let peerConnection = peerConnections.get(from);
-                if (!peerConnection) {
-                    peerConnection = createPeerConnection(from, fromUser);
-                }
+  let peerConnection = peerConnections.get(from);
 
-                // Store the current transceivers order before setting remote description
-                const currentTransceivers = peerConnection.getTransceivers();
-                const currentOrder = currentTransceivers.map(t => t.mid);
+  try {
+    if (!peerConnection) {
+      peerConnection = createPeerConnection(from, fromUser);
+    }
 
-                // If we have existing transceivers, ensure they match the incoming offer
-                if (currentTransceivers.length > 0) {
-                    const offerSdp = new RTCSessionDescription(offer);
-                    const sections = SDPUtils.getMediaSections(offerSdp.sdp);
-                    
-                    // Reorder transceivers to match the offer if needed
-                    sections.forEach((section, idx) => {
-                        const mid = SDPUtils.getMid(section);
-                        const transceiver = currentTransceivers.find(t => t.mid === mid);
-                        if (transceiver && transceiver.mid !== currentOrder[idx]) {
-                            // Swap positions to match offer order
-                            const currentIdx = currentOrder.indexOf(transceiver.mid);
-                            [currentOrder[currentIdx], currentOrder[idx]] = [currentOrder[idx], currentOrder[currentIdx]];
-                        }
-                    });
-                }
+    console.log('📤 Setting remote description...');
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
 
-                console.log('📤 Setting remote description...');
-                await peerConnection.setRemoteDescription(offer);
+    console.log('📤 Creating answer...');
+    const answer = await peerConnection.createAnswer();
 
-                console.log('📤 Creating answer...');
-                const answer = await peerConnection.createAnswer();
+    console.log('📤 Setting local description...');
+    await peerConnection.setLocalDescription(answer);
 
-                // Ensure answer maintains the same m-line order
-                const modifiedAnswer = new RTCSessionDescription({
-                    type: 'answer',
-                    sdp: answer.sdp
-                });
+    console.log('📤 Sending answer to:', fromUser);
+    socket.emit('answer', {
+      answer: peerConnection.localDescription,
+      to: from
+    });
 
-                console.log('📤 Setting local description...');
-                await peerConnection.setLocalDescription(modifiedAnswer);
+  } catch (error) {
+    console.error('❌ Error handling offer:', error);
 
-                console.log('📤 Sending answer to:', fromUser);
-                socket.emit('answer', {
-                    answer: modifiedAnswer,
-                    to: from
-                });
+    // Retry recovery for specific errors
+    if (error.name === 'InvalidAccessError') {
+      try {
+        console.log('🔄 Attempting connection recovery...');
 
-            } catch (error) {
-                console.error('❌ Error handling offer:', error);
-                
-                // Attempt recovery if it's an InvalidAccessError
-                if (error.name === 'InvalidAccessError') {
-                    try {
-                        console.log('🔄 Attempting connection recovery...');
-                        
-                        // Close existing connection
-                        if (peerConnection) {
-                            peerConnection.close();
-                            peerConnections.delete(from);
-                        }
-                        
-                        // Create new connection with fresh state
-                        const newPeerConnection = createPeerConnection(from, fromUser);
-                        
-                        // Set remote description on new connection
-                        await newPeerConnection.setRemoteDescription(offer);
-                        
-                        // Create and send new answer
-                        const newAnswer = await newPeerConnection.createAnswer();
-                        await newPeerConnection.setLocalDescription(newAnswer);
-                        
-                        socket.emit('answer', {
-                            answer: newAnswer,
-                            to: from
-                        });
-                        
-                        console.log('✅ Connection recovery successful');
-                    } catch (recoveryError) {
-                        console.error('❌ Connection recovery failed:', recoveryError);
-                        showNotification('Failed to establish connection after recovery attempt', 'error');
-                    }
-                } else {
-                    showNotification('Failed to establish connection', 'error');
-                }
-            }
+        if (peerConnection) {
+          peerConnection.close();
+          peerConnections.delete(from);
+        }
+
+        const newPeerConnection = createPeerConnection(from, fromUser);
+
+        await newPeerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const newAnswer = await newPeerConnection.createAnswer();
+        await newPeerConnection.setLocalDescription(newAnswer);
+
+        peerConnections.set(from, newPeerConnection); // <- store it again
+
+        socket.emit('answer', {
+          answer: newPeerConnection.localDescription,
+          to: from
         });
+
+        console.log('✅ Connection recovery successful');
+
+      } catch (recoveryError) {
+        console.error('❌ Connection recovery failed:', recoveryError);
+        showNotification('Failed to recover connection', 'error');
+      }
+    } else {
+      showNotification('Failed to establish connection', 'error');
+    }
+  }
+});
 
         // Connection recovery functions
         async function attemptReconnection(peerConnection, socketId, participantEmail) {
@@ -2953,8 +2924,8 @@
             if (localStream) {
                 const audioTrack = localStream.getAudioTracks()[0];
                 if (audioTrack) {
-                    audioTrack.enabled = audioTrack.enabled;
-                    isAudioMuted = audioTrack.enabled;
+                    audioTrack.enabled = !audioTrack.enabled;o
+                    isAudioMuted = !audioTrack.enabled;
 
                     const micBtn = document.getElementById('micBtn');
                     micBtn.classList.toggle('muted', isAudioMuted);
